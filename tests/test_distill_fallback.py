@@ -104,6 +104,9 @@ def test_save_load_distill_state():
 def test_skip_distill_flag():
     """--skip-distill 必须能跳过兜底"""
     # 端到端：跑 ingest_wb_memory_oneshot.py --skip-distill，验证不触发 distill
+    # 超时说明（2026-06-20）：v0.2.5 后 oneshot 含 bge-m3 冷启动 30s + D 方案注入
+    #                          + distill 兜底检测，所以 120s 不够，提至 300s
+    # 加 --skip-inject 进一步缩短到只测 distill 跳过逻辑
     venv_python = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
     if not venv_python.exists():
         print("⏭️  跳过（venv 不存在）")
@@ -111,10 +114,10 @@ def test_skip_distill_flag():
 
     r = subprocess.run(
         [str(venv_python), str(PROJECT_ROOT / "scripts" / "ingest_wb_memory_oneshot.py"),
-         "--skip-distill", "--verbose"],
+         "--skip-distill", "--skip-inject", "--verbose"],
         cwd=str(PROJECT_ROOT),
         env={**os.environ, "PYTHONIOENCODING": "utf-8", "HF_HUB_OFFLINE": "1"},
-        capture_output=True, text=True, timeout=120,
+        capture_output=True, text=True, timeout=300,
     )
 
     # 输出里不应有 "触发蒸馏兜底"

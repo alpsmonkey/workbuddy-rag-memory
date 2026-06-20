@@ -15,7 +15,10 @@ from src.memory import Memory
 
 def test_access_count_increments_on_search():
     """search() 应自动递增 access_count"""
-    mem = Memory(index_dir="./.test_index_decay")
+    import tempfile
+    # 用临时目录隔离，避免残留索引污染（LanceDB 残留文件会导致 open_table 失败）
+    tmpdir = tempfile.mkdtemp(prefix="test_decay_")
+    mem = Memory(index_dir=tmpdir)
     # 先入库
     mem.add("SkillFather 用 Python 5维评分引擎")
     mem.add("LanceDB 是嵌入式向量数据库")
@@ -41,15 +44,17 @@ def test_access_count_increments_on_search():
     print(f"✅ access_count 递增正常: {top_acc_1} -> {top_acc_2}")
     # 清理
     import shutil
-    shutil.rmtree("./.test_index_decay", ignore_errors=True)
+    shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def test_decay_reweighting():
     """时间衰减应让旧记忆下沉（手工造一个 ts 旧的数据）"""
     import sqlite3
+    import tempfile
     from datetime import datetime, timedelta
 
-    mem = Memory(index_dir="./.test_index_decay2")
+    tmpdir = tempfile.mkdtemp(prefix="test_decay2_")
+    mem = Memory(index_dir=tmpdir)
     mem.add("新鲜记忆：今天的事")
 
     # 手工改 SQLite 把 ts 改到 1 年前
@@ -92,7 +97,7 @@ def test_decay_reweighting():
 
     # 清理
     import shutil
-    shutil.rmtree("./.test_index_decay2", ignore_errors=True)
+    shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 if __name__ == "__main__":
