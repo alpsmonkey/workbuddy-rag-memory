@@ -26,6 +26,153 @@
                        Top-K 结果
 ```
 
+## 系统逻辑框架
+
+> 这一节讲清楚「WorkBuddy RAG Memory」在整个记忆体系里扮演什么角色、数据怎么流、谁触发谁、各阶段的真实痛点和解决度。
+> 如果只读一节，读这一节就够了。
+
+### 1. 三层记忆体系全景
+
+WorkBuddy 的记忆不是单层 RAG，而是 3 层栈。RAG 增强是叠在 L2/L3 之上的语义层，不替代原有协议。
+
+| 层 | 范围 | 持久化 | 谁来写 | 检索方式 | 容量上限 |
+|---|---|---|---|---|---|
+| **L1 云端画像** | 用户级长期 | server-side summary | 服务端隐式学习 | 启动时全量注入 `<memory>` | 不限 |
+| **L2 用户级本地** | 跨项目偏好/决策 | `~/.workbuddy/MEMORY.md` | 显式 Edit | `conversation_search`(跨会话) + 本地 RAG | 4000 chars |
+| **L3 项目工作区** | 单项目上下文 | `<workspace>/.workbuddy/memory/YYYY-MM-DD.md` + `MEMORY.md` | 每轮 append | workspace 日志 + 本地 RAG | 3000 chars |
+| **RAG 增强层(本项目)** | L2/L3 的语义化副本 | `~/.workbuddy/rag-index/` | **自动(daemon + cron)** | BM25 + 向量 + 元数据 → RRF → Rerank | 无限(蒸馏收敛) |
+
+**RAG 的定位**：补 WorkBuddy 本地层的「语义检索 + 自动维护」，不替代协议层。WorkBuddy 主体代码改动 = 0。
+
+### 2. 数据流（7 步闭环）
+
+```
+                       ┌────────── 写入路径 ──────────┐
+[用户/脚本写 .md] ──► [chunker] ──► [dedup 三档] ──► [三索引写入]
+                                                       │
+                                                       ▼
+                                                ┌──────────┐
+                                                │ LanceDB  │
+                                                │ SQLite   │
+                                                │ 元数据    │
+                                                └────┬─────┘
+                                                     │
+                       ┌────────── 检索路径 ──────────┤
+                       ▼                              │
+[query] ──► [embedder] ──► [可选 HyDE] ──► 三路召回 ──┘
+                                          │
+                                          ▼
+                              [RRF 融合 k=30]
+                                          │
+                                          ▼
+                       [时间衰减 × 流行度 × 置信度]
+                                          │
+                                          ▼
+                                  [Top-N 粗排]
+                                          │
+                                          ▼
+                              [BGE Reranker 精排]
+                                          │
+                                          ▼
+                                   [Top-K 返回]
+                                          │
+                       ┌──── 维护路径 ────┘
+                       ▼
+        ┌────────────────────────────┐
+        │ daemon: 文件变更 → 5s 入库 │
+        │ distill: 每日 03:00 清理   │
+        │ health: 任意时刻巡检       │
+        └────────────────────────────┘
+```
+
+### 3. 三索引分工
+
+| 索引 | 底层 | 强项 | 弱项 | 命中场景 |
+|---|---|---|---|---|
+| **向量** | LanceDB + bge-m3 (1024 维) | 语义同义改写 | 短 query 差 | 长 query、中英混杂 |
+| **BM25** | SQLite FTS5 | 关键词精确 | 无语义 | 短 query、专有名词、版本号 |
+| **元数据** | SQLite | project/ts/source/confidence 强过滤 | 不可检索内容 | project 过滤、时间衰减 |
+
+三路独立召回 → RRF 融合 → 任一路命中都不会丢。
+
+### 4. 写入路径（去重三档 + 索引大小保护）
+
+```
+新 chunk ──► 算与全库最大余弦相似度 ──►
+    ├─ sim ≥ 0.92 ──► merge（高覆盖低，access_count 取大）
+    ├─ 0.85 ≤ sim < 0.92 ──► skip（防语义撞车）
+    └─ sim < 0.85 ──► insert（新事实）
+```
+
+索引大小策略（防大索引拖垮 dedup）：
+- `k = min(search_k=50, count, MAX_SEARCH_K=200)`
+- 索引 > 1000 → large-mode，`search_k` 减半
+- 环境变量 `DEDUP_MAX_SEARCH_K` / `DEDUP_LARGE_INDEX_THRESHOLD` 可调
+
+### 5. 检索路径（粗排 → 精排）
+
+```
+score = rrf_score × exp(-Δt_days / τ) × log(1 + access_count) × (0.7 + 0.3 × confidence)
+       └─── RRF ───┘ └── 时间衰减 ──┘ └── 流行度 ──┘ └───── 置信度 ─────┘
+
+τ = 90 天（可调）
+RRF k = 30（阶段 1 的 60 区分度太低，已下调）
+默认 record_access = True（被检索到的 chunk 自动 +1，蒸馏时高 access 优先保留）
+```
+
+精排：把 RRF 粗排 Top-N=20 喂给 BGE Reranker v2-m3（Cross-Encoder）→ Top-K=5。Cross-Encoder 把 (q, d) 作为一对输入，能捕捉 token 级匹配，实测 Top-3 命中率 60% → 95%+。
+
+### 6. 自动维护（7 个触发点）
+
+| 触发时机 | 动作 | 工具 |
+|---|---|---|
+| Windows 登录 | 启动 daemon | `install_bootstrap.py`（注册 `HKCU\...\Run\WorkBuddy-RAG-Bootstrap`） |
+| 文件写入 | 5s debounce 后自动 ingest | `~/.workbuddy/rag-daemon/daemon.py`（watchdog） |
+| 新会话开始 | 手动触发入库 | `@rag_bootstrap` skill |
+| 每日 03:00 | 蒸馏低价值旧记忆 | `install_distill_cron.py`（Task Scheduler） |
+| 任意时刻 | 健康度巡检 | `python -m scripts.health --quiet` |
+| 模型缺失 | 下载模型 | `download_bge_m3.py` / `download_bge_reranker.py` |
+| 外部调用 | HTTP REST | `scripts/server.py`（v0.2.3+，端口 8000） |
+
+### 7. 当前架构的 12 个真实痛点 vs RAG 解决度
+
+源自 2026-06-19 复盘。RAG 是补本地层的工具，不是银弹。
+
+| # | 痛点 | RAG 阶段 | 解决度 |
+|---|---|---|---|
+| 1 | 写入靠自觉（模型忘写、写歪） | 1.5 daemon | 🟡 部分（自动捕获写入，但 fact extraction 仍需手动） |
+| 2 | 本地层无语义检索 | 1+ | 🟢 三索引 + RRF 完整解决 |
+| 3 | 冲突不收敛 | 1+ | 🟢 dedup 0.85/0.92 三档 |
+| 4 | 跨 workspace 隔离 | 1.5 | 🟢 共享索引 + `--dir` 多源 |
+| 5 | 注入贪心（全量灌） | 1+ | 🔴 顶层仍全量注入，需 WorkBuddy 主体配合 |
+| 6 | 无时间线 | 2 | 🟡 时间衰减 + 蒸馏，决策 why-lost 部分缓解 |
+| 7 | 无 schema（混在一个文件） | — | 🔴 自由文本，schema 拆分在 WorkBuddy 主体侧 |
+| 8 | skill / agent 记忆割裂 | 2 HyDE | 🟡 HyDE 改善短 query |
+| 9 | 无 forgetting | 2 蒸馏 | 🟢 蒸馏闭环 |
+| 10 | 检索时机靠模型判断 | 1.5 | 🟡 daemon 自动捕获写入路径 |
+| 11 | 无图片 / 代码片段 | — | 🔴 当前 chunker 不解析 |
+| 12 | 跨工作区记忆完全隔离 | 1.5 | 🟢 共享索引 |
+
+**RAG 不解决的（WorkBuddy 主体侧的事）**：
+- 云端 L1 画像
+- 自动 fact extraction（需 prompt 改造）
+- 启动强制注入本地 MEMORY.md（需 WorkBuddy 主体配合）
+- schema 拆分文件
+
+### 8. 演进路径
+
+```
+阶段 1    基础库：embedder + chunker + indexer + dedup + retriever + memory
+   ▼
+阶段 1.5  零侵入集成：watchdog daemon + rag_search skill + bootstrap
+   ▼
+阶段 2    质量：RRF k 调优 + 时间衰减 + BGE Reranker + HyDE + FastAPI 服务端
+   ▼
+阶段 3    待办：完整 gold set 标注 + 自动蒸馏 + 健康度仪表盘 + 冲突可视化
+```
+
+---
+
 ## 快速开始
 
 > 5 分钟指南见 [INSTALL.md](INSTALL.md)。
