@@ -46,8 +46,14 @@ WORKER_PATH = SKILL_DIR / "worker.py"
 TIMEOUT_SEC = 60
 
 
-def run_search(query: str, top_k: int = 5) -> dict:
-    """subprocess 调 venv python 跑检索"""
+def run_search(query: str, top_k: int = 5, use_hyde: bool = True) -> dict:
+    """subprocess 调 venv python 跑检索
+
+    Args:
+        query: 检索 query
+        top_k: 返回条数
+        use_hyde: 是否启用 HyDE Query 改写（默认 True，Mock 模式零额外资源）
+    """
     if not query:
         return {"query": "", "count": 0, "results": [], "note": "empty query"}
 
@@ -57,6 +63,8 @@ def run_search(query: str, top_k: int = 5) -> dict:
         return {"query": query, "count": 0, "results": [], "note": f"worker missing: {WORKER_PATH}"}
 
     cmd = [str(VENV_PYTHON), str(WORKER_PATH), query, str(top_k)]
+    if not use_hyde:
+        cmd.append("--no-hyde")
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "HF_HUB_OFFLINE": "1"}
 
     try:
@@ -96,6 +104,8 @@ def main():
     parser.add_argument("query", nargs="?", help="检索 query")
     parser.add_argument("top_k_pos", nargs="?", type=int, default=None, help="top_k (positional)")
     parser.add_argument("--top-k", type=int, default=5, help="返回条数（1-20）")
+    parser.add_argument("--no-hyde", dest="hyde", action="store_false", default=True,
+                        help="禁用 HyDE Query 改写（默认启用 Mock HyDE，零额外资源）")
     parser.add_argument("--stdin", action="store_true", help="从 stdin 读 JSON")
     args = parser.parse_args()
 
@@ -115,7 +125,7 @@ def main():
         sys.exit(1)
 
     top_k = max(1, min(20, top_k))
-    result = run_search(query, top_k)
+    result = run_search(query, top_k, use_hyde=args.hyde)
     print(format_output(result))
 
 

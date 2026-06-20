@@ -19,12 +19,23 @@ def main():
     parser.add_argument("--source", default=None)
     parser.add_argument("--index-dir", default="./.index")
     parser.add_argument("--format", choices=["table", "json"], default="table")
+    parser.add_argument("--no-hyde", dest="use_hyde", action="store_false", default=True,
+                        help="禁用 HyDE Query 改写（默认启用 Mock HyDE）")
     args = parser.parse_args()
 
-    mem = Memory(index_dir=args.index_dir)
+    # 注入 HyDE（默认 Mock，无 LLM 也工作）
+    hyde = None
+    if args.use_hyde:
+        try:
+            from src.hyde import make_default_hyde
+            hyde = make_default_hyde()
+        except ImportError:
+            pass
+
+    mem = Memory(index_dir=args.index_dir, hyde=hyde)
     print(f"🔍 查询: {args.query}\n")
 
-    results = mem.search(args.query, top_k=args.top_k, project=args.project, source=args.source)
+    results = mem.search(args.query, top_k=args.top_k, project=args.project, source=args.source, use_hyde=args.use_hyde)
 
     if not results:
         print("❌ 无结果")

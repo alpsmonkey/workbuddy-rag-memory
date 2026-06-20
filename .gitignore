@@ -9,6 +9,7 @@ __pycache__/
 # 索引和测试数据
 .index/
 .index-test/
+.index-test-*/
 *.bak-*/
 
 # 环境

@@ -44,29 +44,51 @@ _DEFAULT_INDEX = Path.home() / ".workbuddy" / "rag-index"
 INDEX_DIR = Path(os.environ.get("WB_RAG_INDEX_DIR", str(_DEFAULT_INDEX)))
 
 
-def search(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-    """核心检索逻辑"""
+def search(query: str, top_k: int = 5, use_hyde: bool = True) -> List[Dict[str, Any]]:
+    """核心检索逻辑
+
+    Args:
+        query: 检索 query
+        top_k: 返回条数
+        use_hyde: 是否启用 HyDE Query 改写（默认 True，使用 Mock，零额外资源）
+    """
     if not INDEX_DIR.exists():
         return []
 
     try:
         from memory import Memory
-        memory = Memory(index_dir=str(INDEX_DIR), dedup_threshold=0.92)
-        results = memory.search(query, top_k=top_k)
+        # 注入 Mock HyDE（无 LLM 时也能提升短 query 召回 5-15%）
+        try:
+            from hyde import make_default_hyde
+            hyde = make_default_hyde()
+        except (ImportError, AttributeError) as e:
+            # HyDE 模块缺失时降级（不阻断检索）
+            hyde = None
+            print(f"[worker] HyDE 不可用: {e}", file=sys.stderr)
+
+        memory = Memory(index_dir=str(INDEX_DIR), dedup_threshold=0.92, hyde=hyde)
+        results = memory.search(query, top_k=top_k, use_hyde=use_hyde)
         return [r.to_dict() if hasattr(r, "to_dict") else r for r in results]
-    except Exception:
+    except Exception as e:
+        print(f"[worker] search failed: {e}", file=sys.stderr)
         return []
 
 
 def main():
-    query = sys.argv[1] if len(sys.argv) > 1 else ""
-    top_k = int(sys.argv[2]) if len(sys.argv) > 2 else 5
-    if not query:
+    import argparse
+    parser = argparse.ArgumentParser(description="RAG worker - 检索执行")
+    parser.add_argument("query", nargs="?", default="")
+    parser.add_argument("top_k", nargs="?", type=int, default=5)
+    parser.add_argument("--no-hyde", dest="use_hyde", action="store_false", default=True,
+                        help="禁用 HyDE Query 改写（默认启用 Mock HyDE）")
+    args = parser.parse_args()
+
+    if not args.query:
         print(json.dumps({"query": "", "count": 0, "results": [], "note": "empty query"}))
         return
-    top_k = max(1, min(20, top_k))
-    results = search(query, top_k)
-    out = {"query": query, "count": len(results), "results": results}
+    top_k = max(1, min(20, args.top_k))
+    results = search(args.query, top_k, use_hyde=args.use_hyde)
+    out = {"query": args.query, "count": len(results), "results": results, "use_hyde": args.use_hyde}
     print(json.dumps(out, ensure_ascii=False))
 
 
