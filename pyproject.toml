@@ -1,6 +1,6 @@
 [project]
 name = "workbuddy-rag-memory"
-version = "0.2.0"
+version = "0.2.1"
 description = "WorkBuddy RAG 增强记忆系统：双索引 + 去重 + 时间衰减 + Cross-Encoder 重排 + 自动蒸馏"
 requires-python = ">=3.10"
 authors = [
@@ -94,6 +94,9 @@ tau_days = 90.0
 
 # 自动蒸馏 cron 时间
 distill_cron_time = "03:00"
+
+# 计算设备（auto / cpu / cuda）
+device = "auto"
 
 # ============================================================================
 # pytest 配置

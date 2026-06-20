@@ -12,11 +12,19 @@ embedding 封装
 from __future__ import annotations
 import os
 import hashlib
+import logging
 import warnings
 from functools import lru_cache
 from typing import List, Union
 
 import numpy as np
+
+try:
+    from .config import get_embedding_model, get_embedding_dim, get_device
+except ImportError:
+    from config import get_embedding_model, get_embedding_dim, get_device
+
+logger = logging.getLogger(__name__)
 
 # 【默认离线】防止 CI/冒烟测试或网络不稳定时反复连 HuggingFace
 # 任何希望联网下载的位置必须显式 os.environ["HF_HUB_OFFLINE"] = "0"
@@ -29,6 +37,21 @@ EMBED_MODEL_DEFAULT = "BAAI/bge-m3"
 EMBED_DIM_DEFAULT = 1024
 
 
+def _resolve_device(requested: str) -> str:
+    """auto / cpu / cuda 解析"""
+    if requested in ("cpu", "cuda"):
+        return requested
+    # auto
+    try:
+        import torch
+        if torch.cuda.is_available():
+            logger.info("检测到 CUDA，自动使用 GPU")
+            return "cuda"
+    except ImportError:
+        pass
+    return "cpu"
+
+
 class Embedder:
     """Embedding 包装器：自动选择最优后端"""
 
@@ -36,12 +59,13 @@ class Embedder:
         self,
         model_name: str = None,
         dim: int = None,
-        device: str = "cpu",
+        device: str = None,
         normalize: bool = True,
     ):
-        self.model_name = model_name or os.getenv("EMBED_MODEL", EMBED_MODEL_DEFAULT)
-        self.dim = dim or int(os.getenv("EMBED_DIM", EMBED_DIM_DEFAULT))
-        self.device = device
+        # 优先级：参数 > 环境变量 WB_RAG_* > pyproject.toml > 默认
+        self.model_name = model_name or get_embedding_model()
+        self.dim = dim or get_embedding_dim()
+        self.device = _resolve_device(device or get_device())
         self.normalize = normalize
         self._backend = None
         self._model = None
@@ -56,15 +80,16 @@ class Embedder:
             # 自动校准维度
             test_vec = self._model.encode(["test"], normalize_embeddings=self.normalize)
             self.dim = test_vec.shape[1]
+            logger.info("Embedder 加载成功: model=%s dim=%d device=%s backend=%s",
+                       self.model_name, self.dim, self.device, self._backend)
             return
-        except Exception as e:
-            warnings.warn(f"[Embedder] sentence-transformers 加载失败: {e}")
+        except (ImportError, OSError, RuntimeError, ValueError) as e:
+            logger.warning("sentence-transformers 加载失败: %s", e)
 
         # 兜底: 用 hash 生成稳定伪向量（仅用于冒烟测试，不可用作生产）
         self._backend = "hash-fallback"
-        warnings.warn(
-            "[Embedder] 使用 hash 兜底后端，向量无语义信息，仅供测试。\n"
-            "请安装: pip install sentence-transformers"
+        logger.warning(
+            "使用 hash 兜底后端，向量无语义信息，仅供测试。请安装: pip install sentence-transformers"
         )
 
     def embed(self, texts: Union[str, List[str]]) -> np.ndarray:

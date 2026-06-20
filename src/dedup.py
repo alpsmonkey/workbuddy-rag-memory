@@ -13,6 +13,7 @@
 - 大索引（> 1000）时降低 search_k 避免冗余
 """
 from __future__ import annotations
+import logging
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Dict
@@ -23,10 +24,21 @@ try:
     from .chunker import Chunk
     from .indexer import Indexer
     from .embedder import Embedder
+    from .config import (
+        get_max_search_k_compat, get_large_index_threshold_compat,
+        get_dedup_skip_low,
+    )
 except ImportError:
     from chunker import Chunk
     from indexer import Indexer
     from embedder import Embedder
+    from config import (
+        get_max_search_k_compat, get_large_index_threshold_compat,
+        get_dedup_skip_low,
+    )
+
+
+logger = logging.getLogger(__name__)
 
 
 class Decision(str, Enum):
@@ -36,10 +48,14 @@ class Decision(str, Enum):
 
 
 # 硬上限：防大索引时 vector_search 变成 O(n)
-MAX_SEARCH_K = int(os.getenv("DEDUP_MAX_SEARCH_K", "200"))
+# 优先 WB_RAG_MAX_SEARCH_K > DEDUP_MAX_SEARCH_K (legacy) > pyproject.toml > 200
+MAX_SEARCH_K = get_max_search_k_compat()
 
 # 大索引阈值：超过此值认为"已经很丰富"，减少 dedup 召回窗口
-LARGE_INDEX_THRESHOLD = int(os.getenv("DEDUP_LARGE_INDEX_THRESHOLD", "1000"))
+LARGE_INDEX_THRESHOLD = get_large_index_threshold_compat()
+
+# skip 区间下限（低于此相似度直接 insert）
+DEFAULT_SKIP_LOW = get_dedup_skip_low()
 
 
 @dataclass

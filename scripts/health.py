@@ -274,11 +274,18 @@ def main():
     parser.add_argument("--index-dir", default="./.index")
     parser.add_argument("--json", action="store_true", help="输出 JSON 格式")
     parser.add_argument("--quiet", "-q", action="store_true", help="只显示红黄状态")
+    parser.add_argument("--log-level", default="WARNING",
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+                        help="logging 级别")
     parser.add_argument(
         "--watch", type=int, default=0, metavar="SECONDS",
         help="持续检查模式，每 N 秒跑一次（适合 cron / watchdog 接入）",
     )
     args = parser.parse_args()
+
+    # 配置 logging（health 报告本身用 print，logging 给异常 / 调试用）
+    from scripts._logging import setup_logging
+    setup_logging(level=args.log_level)
 
     if args.watch > 0:
         import time

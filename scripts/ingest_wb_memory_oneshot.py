@@ -35,7 +35,7 @@ def _log(msg: str, verbose: bool = False) -> None:
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(LOG_PATH, "a", encoding="utf-8") as f:
             f.write(line + "\n")
-    except Exception:
+    except (OSError, ValueError, KeyError):
         pass  # 日志写不进去也不能影响主流程
     if verbose:
         print(line, file=sys.stderr)
@@ -100,14 +100,14 @@ def run_once(verbose: bool = False, dry_run: bool = False) -> int:
         try:
             health = mem.indexer.all_chunks()
             _log(f"索引现状: total={len(health)} chunks", verbose)
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             _log(f"健康度快照失败: {e}", verbose)
 
         _log("=== ingest_wb_memory_oneshot 完成 ===", verbose)
         print(msg)  # stdout 给 skill bridge 解析
         return 0
 
-    except Exception as e:
+    except (OSError, RuntimeError, ValueError, KeyError, AttributeError) as e:
         # 任何失败都吞掉，写日志即可
         tb = traceback.format_exc()
         _log(f"❌ ingest 失败: {e}\n{tb}", verbose)

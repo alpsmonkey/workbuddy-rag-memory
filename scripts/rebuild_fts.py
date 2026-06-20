@@ -62,7 +62,7 @@ def main():
                     (r[0], r[1], r[2], r[3])
                 )
                 inserted += 1
-            except Exception as e:
+            except (OSError, sqlite3.Error, ValueError) as e:
                 print(f"  ⚠️  {r[0]}: {e}")
         conn.commit()
         print(f"✓ 回填: {inserted}/{total}")
@@ -77,7 +77,7 @@ def main():
                 ).fetchall()
                 ids = [r[0][:30] for r in rows]
                 print(f'  FTS {q} → {len(rows)} hits: {ids}')
-            except Exception as e:
+            except (OSError, sqlite3.Error, ValueError) as e:
                 print(f'  FTS {q} → ERROR: {e}')
     finally:
         conn.close()

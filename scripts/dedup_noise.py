@@ -8,6 +8,7 @@
     python scripts/dedup_noise.py --index-dir <DIR> [--dry-run] [--keep-projects ...]
 """
 import argparse
+import sqlite3
 import hashlib
 import sys
 from pathlib import Path
@@ -119,7 +120,7 @@ def main():
         try:
             if idx.delete(cid):
                 deleted += 1
-        except Exception as e:
+        except (OSError, sqlite3.Error, RuntimeError, ValueError) as e:
             if args.verbose:
                 print(f"  ⚠️  {cid}: {e}")
 

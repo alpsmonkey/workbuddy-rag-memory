@@ -81,8 +81,8 @@ def install_windows() -> tuple[bool, str]:
         )
     except OSError as e:
         return False, f"注册表写入失败: {e}"
-    except Exception as e:
-        return False, f"未知错误: {e}"
+    except (ValueError, KeyError, AttributeError) as e:
+        return False, f"配置错误: {e}"
 
 
 def uninstall_windows() -> tuple[bool, str]:

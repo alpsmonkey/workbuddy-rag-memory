@@ -161,10 +161,10 @@ def distill(
                 # LanceDB 删除
                 try:
                     mem.indexer.table.delete(f"id = '{c['id']}'")
-                except Exception:
+                except (OSError, ValueError, KeyError, RuntimeError):
                     pass
                 purged_count += 1
-            except Exception as e:
+            except (OSError, RuntimeError, ValueError) as e:
                 print(f"[warn] 删除失败 {c['id']}: {e}")
 
     return {

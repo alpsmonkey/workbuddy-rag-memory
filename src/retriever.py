@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import math
 import re
+import logging
+import sqlite3
 from datetime import datetime, date
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field
@@ -21,6 +23,9 @@ except ImportError:
     from indexer import Indexer
     from embedder import Embedder
     from reranker import Reranker
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -144,7 +149,7 @@ class Retriever:
             if isinstance(ents, str):
                 try:
                     ents = json.loads(ents)
-                except Exception:
+                except (json.JSONDecodeError, TypeError):
                     ents = []
 
             # RRF score
@@ -204,9 +209,9 @@ class Retriever:
                     key=lambda r: (rerank_scores.get(r.id, 0.0), r.score),
                     reverse=True,
                 )
-            except Exception as e:
+            except (RuntimeError, OSError, ValueError) as e:
                 # 静默降级：不 rerank
-                print(f"[Retriever.search] rerank 失败，回退: {e}")
+                logger.warning("Retriever.search rerank 失败，回退: %s", e)
 
         top_results = results[:top_k]
         # 回填 rerank_score
@@ -223,8 +228,8 @@ class Retriever:
                 # 回填 +1（让 UI 显示一致）
                 for r in top_results:
                     r.access_count += 1
-            except Exception:
+            except sqlite3.Error as e:
                 # 静默降级，检索不应被记录失败阻塞
-                pass
+                logger.debug("record_access 失败（已忽略）: %s", e)
 
         return top_results

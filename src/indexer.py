@@ -8,12 +8,13 @@
 """
 from __future__ import annotations
 import os
+import json
+import logging
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Any
-import json
 
 import lancedb
 import pyarrow as pa
@@ -23,6 +24,8 @@ try:
     from .chunker import Chunk
 except ImportError:
     from chunker import Chunk
+
+logger = logging.getLogger(__name__)
 
 
 SCHEMA_VECTOR = pa.schema([
@@ -131,8 +134,9 @@ class Indexer:
                 )
                 c.commit()
             return True
-        except Exception as e:
-            print(f"[Indexer.insert] 失败: {e}")
+        except (OSError, sqlite3.Error, ValueError) as e:
+            # LanceError 继承 ValueError（lance_datafusion Cast 错误）
+            logger.error("Indexer.insert 失败: %s", e)
             return False
 
     def update(self, chunk_id: str, chunk: Chunk, vector: List[float]) -> bool:
@@ -167,8 +171,8 @@ class Indexer:
                 )
                 c.commit()
             return True
-        except Exception as e:
-            print(f"[Indexer.update] 失败: {e}")
+        except (OSError, sqlite3.Error) as e:
+            logger.error("Indexer.update 失败: %s", e)
             return False
 
     def vector_search(self, vector: List[float], k: int = 20,
@@ -180,8 +184,8 @@ class Indexer:
                 q = q.where(f"project = '{project}'")
             results = q.to_list()
             return results
-        except Exception as e:
-            print(f"[Indexer.vector_search] 失败: {e}")
+        except (OSError, RuntimeError, ValueError) as e:
+            logger.error("Indexer.vector_search 失败: %s", e)
             return []
 
     def bm25_search(self, query: str, k: int = 20, project: str = None) -> List[Dict]:
@@ -238,8 +242,8 @@ class Indexer:
                         (fts_query, k)
                     ).fetchall()
             return [dict(r) for r in rows]
-        except Exception as e:
-            print(f"[Indexer.bm25_search] 失败: {e}")
+        except sqlite3.Error as e:
+            logger.error("Indexer.bm25_search 失败: %s", e)
             return []
 
     def get(self, chunk_id: str) -> Optional[Dict]:
@@ -263,8 +267,8 @@ class Indexer:
                 c.execute("DELETE FROM chunks_fts WHERE id=?", (chunk_id,))
                 c.commit()
             return True
-        except Exception as e:
-            print(f"[Indexer.delete] 失败 {chunk_id}: {e}")
+        except (OSError, sqlite3.Error) as e:
+            logger.error("Indexer.delete 失败 %s: %s", chunk_id, e)
             return False
 
     def record_access(self, chunk_ids: List[str]) -> int:
@@ -289,8 +293,8 @@ class Indexer:
                 )
                 c.commit()
                 return c.total_changes
-        except Exception as e:
-            print(f"[Indexer.record_access] 失败: {e}")
+        except sqlite3.Error as e:
+            logger.error("Indexer.record_access 失败: %s", e)
             return 0
 
     def count(self) -> int:
@@ -325,7 +329,7 @@ class Indexer:
             d = dict(r)
             try:
                 d["entities"] = json.loads(d.get("entities", "[]"))
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 d["entities"] = []
             results.append(d)
         return results

@@ -5,8 +5,11 @@ from __future__ import annotations
 import os
 import re
 import json
+import logging
 from pathlib import Path
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 try:
     from .embedder import Embedder, get_default_embedder
@@ -15,6 +18,7 @@ try:
     from .retriever import Retriever, RetrievalResult
     from .chunker import Chunk, chunk_text
     from .reranker import Reranker
+    from .config import get_index_dir as _get_index_dir, get_dedup_threshold as _get_dedup_threshold
 except ImportError:
     from embedder import Embedder, get_default_embedder
     from indexer import Indexer
@@ -22,6 +26,7 @@ except ImportError:
     from retriever import Retriever, RetrievalResult
     from chunker import Chunk, chunk_text
     from reranker import Reranker
+    from config import get_index_dir as _get_index_dir, get_dedup_threshold as _get_dedup_threshold
 
 
 # 兼容旧代码：保留原常量（指向 .config 默认值）
@@ -73,12 +78,34 @@ class Memory:
         dedup_threshold: float = None,
     ):
         self.embedder = embedder or get_default_embedder()
-        self.index_dir = Path(index_dir or os.getenv("INDEX_DIR", "./.index"))
+        # 优先级：参数 > WB_RAG_INDEX_DIR > INDEX_DIR (legacy) > pyproject.toml > ./.index
+        if index_dir:
+            self.index_dir = Path(index_dir)
+        else:
+            try:
+                self.index_dir = _get_index_dir()
+            except (OSError, KeyError, AttributeError):
+                self.index_dir = Path(os.getenv("INDEX_DIR", "./.index"))
         self.indexer = Indexer(str(self.index_dir))
+
+        # 阈值优先级：参数 > WB_RAG_DEDUP_THRESHOLD > DEDUP_THRESHOLD (legacy) > pyproject.toml > 0.92
+        if dedup_threshold is not None:
+            effective_threshold = dedup_threshold
+        else:
+            legacy = os.getenv("DEDUP_THRESHOLD")
+            if legacy is not None:
+                import warnings as _w
+                _w.warn("DEDUP_THRESHOLD 已 deprecated，请用 WB_RAG_DEDUP_THRESHOLD", DeprecationWarning)
+                effective_threshold = float(legacy)
+            else:
+                try:
+                    effective_threshold = _get_dedup_threshold()
+                except (OSError, KeyError, ValueError, AttributeError):
+                    effective_threshold = 0.92
         self.dedup = Dedup(
             self.indexer,
             self.embedder,
-            threshold=dedup_threshold or float(os.getenv("DEDUP_THRESHOLD", "0.92")),
+            threshold=effective_threshold,
         )
         self.retriever = Retriever(
             self.indexer, self.embedder, reranker=reranker,
@@ -106,7 +133,7 @@ class Memory:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             text = path.read_text(encoding="gbk", errors="ignore")
-        except Exception:
+        except (OSError, ValueError, KeyError):
             return 0
         chunks = chunk_text(text, source=str(path))
         if not chunks:
@@ -126,7 +153,7 @@ class Memory:
             return {}
         try:
             return json.loads(self._ingest_state_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, ValueError, KeyError):
             return {}
 
     def _save_ingest_state(self, state: dict) -> None:
@@ -176,17 +203,17 @@ class Memory:
         if dirs is None:
             try:
                 dirs = [str(d) for d in _get_memory_dirs()]
-            except Exception:
+            except (OSError, KeyError, AttributeError):
                 dirs = DEFAULT_WB_MEMORY_DIRS
         if ignore is None:
             try:
                 ignore = _get_ignore_patterns()
-            except Exception:
+            except (OSError, KeyError, AttributeError):
                 ignore = DEFAULT_IGNORE_PATTERNS
         if patterns is None:
             try:
                 patterns = _get_memory_patterns()
-            except Exception:
+            except (OSError, KeyError, AttributeError):
                 patterns = DEFAULT_WB_MEMORY_PATTERNS
 
         resolved_dirs = []
@@ -259,7 +286,7 @@ class Memory:
                 text = f.read_text(encoding="utf-8")
             except UnicodeDecodeError:
                 text = f.read_text(encoding="gbk", errors="ignore")
-            except Exception:
+            except (OSError, PermissionError):
                 text = ""
             chunks = chunk_text(text, source=str(f))
             if project:
