@@ -8,12 +8,17 @@ WorkBuddy 启动时跑的 oneshot ingest 脚本。
 - 自动 cwd 修复：从 venv python 调用时显式指定 cwd=项目根
 - 蒸馏兜底（v0.2.4）：检查上次蒸馏时间，过期就自动跑
   解决"电脑没开机时 Task Scheduler 漏跑"的问题
+- D 方案注入（v0.2.5）：蒸馏完成后自动 inject 蒸馏骨架到 ~/.workbuddy/MEMORY.md
+  把每项目 top-N 高分记忆以可重入的标记区间写入 L2 长期记忆
+  与 rag_search skill 互补（启动预热 vs 按需检索），不重复
+  字符预算：手写区不动，自动注入区 ≤ 2400 字符
 
 用法:
   python scripts/ingest_wb_memory_oneshot.py            # 跑一次（静默）
   python scripts/ingest_wb_memory_oneshot.py --verbose  # 显示进度
   python scripts/ingest_wb_memory_oneshot.py --dry-run  # 只看不写
   python scripts/ingest_wb_memory_oneshot.py --skip-distill  # 跳过蒸馏检查
+  python scripts/ingest_wb_memory_oneshot.py --skip-inject  # 跳过 D 方案注入
 """
 from __future__ import annotations
 import argparse
@@ -182,7 +187,7 @@ def _run_distill(index_dir: Path, verbose: bool = False) -> dict:
         return {"ok": False, "reason": str(e), "duration_s": time.time() - t0}
 
 
-def run_once(verbose: bool = False, dry_run: bool = False, skip_distill: bool = False) -> int:
+def run_once(verbose: bool = False, dry_run: bool = False, skip_distill: bool = False, skip_inject: bool = False) -> int:
     """跑一次 ingest + 蒸馏兜底，返回 0（成功）或 1（失败但不影响 WorkBuddy 启动）"""
     try:
         _log(f"=== 启动 ingest_wb_memory_oneshot (dry_run={dry_run}, skip_distill={skip_distill}) ===", verbose)
@@ -263,8 +268,37 @@ def run_once(verbose: bool = False, dry_run: bool = False, skip_distill: bool = 
             except (OSError, RuntimeError, ValueError, KeyError) as e:
                 _log(f"蒸馏兜底异常（已忽略）: {e}", verbose)
 
-        _log("=== ingest_wb_memory_oneshot 完成 ===", verbose)
+        _log(f"=== ingest_wb_memory_oneshot 完成 (skip_inject={skip_inject}) ===", verbose)
         print(msg)  # stdout 给 skill bridge 解析
+
+        # D 方案注入：蒸馏骨架 → ~/.workbuddy/MEMORY.md（启动预热）
+        # 与 rag_search 互补：mem 启动时已有 L2 骨架，按需检索兜底长尾
+        if not skip_inject and not dry_run and total_chunks > 0:
+            try:
+                # import 放函数内避免顶部 import 失败
+                from scripts.inject_distilled_to_memory import run_inject
+                from pathlib import Path as _P
+                inject_result = run_inject(
+                    index_dir=index_dir,
+                    memory_path=_P.home() / ".workbuddy" / "MEMORY.md",
+                    verbose=verbose,
+                    dry_run=False,
+                )
+                if inject_result.get("ok") and not inject_result.get("dry_run"):
+                    _log(
+                        f"✅ D 方案注入完成: {inject_result.get('auto_block_chars', 0)} 字符，"
+                        f"{inject_result.get('projects_injected', 0)} 项目 / "
+                        f"{inject_result.get('chunks_injected', 0)} chunks",
+                        verbose,
+                    )
+                else:
+                    _log(
+                        f"⚠️ D 方案注入未完成: {inject_result.get('error', '?')}",
+                        verbose,
+                    )
+            except (OSError, ImportError, RuntimeError, ValueError) as e:
+                _log(f"D 方案注入异常（已忽略）: {e}", verbose)
+
         return 0
 
     except (OSError, RuntimeError, ValueError, KeyError, AttributeError) as e:
@@ -280,12 +314,15 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="只看不写索引")
     parser.add_argument("--skip-distill", action="store_true",
                         help="跳过蒸馏兜底（默认会检查并按需补跑）")
+    parser.add_argument("--skip-inject", action="store_true",
+                        help="跳过 D 方案注入（默认蒸馏完成后自动 inject 到 MEMORY.md）")
     args = parser.parse_args()
 
     sys.exit(run_once(
         verbose=args.verbose,
         dry_run=args.dry_run,
         skip_distill=args.skip_distill,
+        skip_inject=args.skip_inject,
     ))
 
 
