@@ -18,6 +18,7 @@ try:
     from .retriever import Retriever, RetrievalResult
     from .chunker import Chunk, chunk_text
     from .reranker import Reranker
+    from .hyde import Hyde, make_default_hyde
     from .config import get_index_dir as _get_index_dir, get_dedup_threshold as _get_dedup_threshold
 except ImportError:
     from embedder import Embedder, get_default_embedder
@@ -26,6 +27,7 @@ except ImportError:
     from retriever import Retriever, RetrievalResult
     from chunker import Chunk, chunk_text
     from reranker import Reranker
+    from hyde import Hyde, make_default_hyde
     from config import get_index_dir as _get_index_dir, get_dedup_threshold as _get_dedup_threshold
 
 
@@ -75,6 +77,7 @@ class Memory:
         index_dir: str = None,
         embedder: Optional[Embedder] = None,
         reranker: Optional[Reranker] = None,
+        hyde: Optional[Hyde] = None,
         dedup_threshold: float = None,
     ):
         self.embedder = embedder or get_default_embedder()
@@ -108,7 +111,7 @@ class Memory:
             threshold=effective_threshold,
         )
         self.retriever = Retriever(
-            self.indexer, self.embedder, reranker=reranker,
+            self.indexer, self.embedder, reranker=reranker, hyde=hyde,
         )
 
         # 增量状态文件（按目录存，避免冲突）
@@ -327,10 +330,12 @@ class Memory:
         enable_decay: bool = True,
         rerank: bool = False,
         candidates: int = 20,
+        use_hyde: bool = False,
     ) -> List[RetrievalResult]:
         return self.retriever.search(
             query, top_k=top_k, project=project, source=source,
             enable_decay=enable_decay, rerank=rerank, candidates=candidates,
+            use_hyde=use_hyde,
         )
 
     def stats(self) -> dict:

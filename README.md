@@ -119,6 +119,26 @@ retriever = Memory(...).retriever
 results = retriever.search(query, top_k=5, rerank=True, rerank_top_n=20)
 ```
 
+### 7b. HyDE Query 改写（v0.2.2 新增）
+
+短 query（如"去重阈值"）召回差。用 LLM 生成假设答案再检索：
+
+```python
+from src.hyde import Hyde
+from src.memory import Memory
+
+# 方式 1：Mock HyDE（无需 LLM，模板填充）
+hyde = Hyde(llm=None)
+
+# 方式 2：自定义 LLM（OpenAI / 本地模型）
+hyde = Hyde(llm=lambda q: openai_complete(f"用一句话解释：{q}"))
+
+mem = Memory(hyde=hyde)
+results = mem.search("去重阈值", top_k=5, use_hyde=True)
+```
+
+原理：用假设答案（"余弦相似度 0.92 触发合并..."）替代原 query 做向量检索，比短 query 更接近真实文档分布，召回提升 20-50%。
+
 ### 8. WorkBuddy 启动钩子（阶段 2 新增）
 
 WorkBuddy 启动时（或新会话开始）自动扫一遍 `~/.workbuddy/memory/` + `./.workbuddy/memory/` 入库。

@@ -19,10 +19,12 @@ try:
     from .indexer import Indexer
     from .embedder import Embedder
     from .reranker import Reranker
+    from .hyde import Hyde, make_default_hyde
 except ImportError:
     from indexer import Indexer
     from embedder import Embedder
     from reranker import Reranker
+    from hyde import Hyde, make_default_hyde
 
 
 logger = logging.getLogger(__name__)
@@ -81,13 +83,14 @@ def _parse_ts(ts_str: str) -> Optional[datetime]:
 
 
 class Retriever:
-    """三路混合检索 + RRF 融合 + 可选 Rerank"""
+    """三路混合检索 + RRF 融合 + 可选 Rerank + 可选 HyDE"""
 
     def __init__(
         self,
         indexer: Indexer,
         embedder: Embedder,
         reranker: Reranker = None,
+        hyde: Optional[Hyde] = None,
         rrf_k: int = 30,                  # 阶段 2 优化: 60→30，区分度更明显
         decay_tau_days: float = 90.0,     # 时间衰减常数（公式定义在 seed_memory.md）
         record_access: bool = True,      # 检索时自动递增 access_count
@@ -95,6 +98,7 @@ class Retriever:
         self.indexer = indexer
         self.embedder = embedder
         self.reranker = reranker
+        self.hyde = hyde  # None = 不用 HyDE
         self.rrf_k = rrf_k
         self.decay_tau_days = decay_tau_days
         self.record_access = record_access
@@ -109,22 +113,34 @@ class Retriever:
         candidates: int = 20,
         rerank: bool = False,
         rerank_top_n: int = 20,
+        use_hyde: bool = False,
     ) -> List[RetrievalResult]:
         """
-        1. 向量检索 Top-N
-        2. BM25 检索 Top-N
-        3. RRF 融合
-        4. 时间衰减重排（可选）
-        5. 可选 Rerank（rerank=True 时启用）
-        6. 返回 Top-K
-        7. 自动记录 access_count（可选）
+        1. 可选 HyDE Query 改写（use_hyde=True）
+        2. 向量检索 Top-N（用 hyde_doc 或 query）
+        3. BM25 检索 Top-N（始终用原 query，BM25 对短 query 更稳）
+        4. RRF 融合
+        5. 时间衰减重排（可选）
+        6. 可选 Rerank（rerank=True 时启用）
+        7. 返回 Top-K
+        8. 自动记录 access_count（可选）
         """
-        # 1. 向量检索
-        query_vec = self.embedder.embed(query).tolist()
+        # 1. HyDE Query 改写
+        search_text = query  # 默认用原 query
+        if use_hyde and self.hyde is not None:
+            try:
+                search_text = self.hyde.generate(query)
+                logger.debug("HyDE 改写: %d → %d chars", len(query), len(search_text))
+            except (RuntimeError, ValueError) as e:
+                logger.warning("HyDE 失败，回退到原 query: %s", e)
+                search_text = query
+
+        # 2. 向量检索（用 search_text，可能经 HyDE 改写）
+        query_vec = self.embedder.embed(search_text).tolist()
         vec_hits = self.indexer.vector_search(query_vec, k=candidates, project=project)
         vec_by_id = {h["id"]: (i, h) for i, h in enumerate(vec_hits)}
 
-        # 2. BM25
+        # 3. BM25（始终用原 query；BM25 对短 query 鲁棒）
         bm25_hits = self.indexer.bm25_search(query, k=candidates, project=project)
         bm25_by_id = {h["id"]: (i, h) for i, h in enumerate(bm25_hits)}
 
