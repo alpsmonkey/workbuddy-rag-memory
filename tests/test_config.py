@@ -49,22 +49,27 @@ def test_env_override():
     from src import config
 
     # 用 Windows 兼容路径（Git Bash 下 /tmp → E:/tmp）
-    test_path = os.path.join(tempfile.gettempdir(), "test-rag-index")
+    # 注意：Windows runner 会把长路径自动转 8.3 短路径（如 RUNNER~1），
+    # 必须用 Path.resolve() 把两边都 normalize 才能 assert 相等
+    test_path = str(Path(tempfile.gettempdir()).resolve() / "test-rag-index")
 
     # 模拟环境变量覆盖
     os.environ["WB_RAG_INDEX_DIR"] = test_path
     os.environ["WB_RAG_DEDUP_THRESHOLD"] = "0.85"
     os.environ["WB_RAG_MAX_SEARCH_K"] = "500"
-    os.environ["WB_RAG_DEFAULT_MEMORY_DIRS"] = os.path.join(tempfile.gettempdir(), "dir1") + "," + os.path.join(tempfile.gettempdir(), "dir2")
+    dir1 = str(Path(tempfile.gettempdir()).resolve() / "dir1")
+    dir2 = str(Path(tempfile.gettempdir()).resolve() / "dir2")
+    os.environ["WB_RAG_DEFAULT_MEMORY_DIRS"] = dir1 + "," + dir2
 
     # 清缓存
     config._config_cache = None
 
-    assert str(config.get_index_dir()) == test_path
+    # 两边都通过 Path.resolve() 标准化（处理 Windows 8.3 短路径）
+    assert Path(str(config.get_index_dir())) == Path(test_path)
     assert config.get_dedup_threshold() == 0.85
     assert config.get_max_search_k() == 500
-    expected_dirs = [os.path.join(tempfile.gettempdir(), "dir1"), os.path.join(tempfile.gettempdir(), "dir2")]
-    assert [str(d) for d in config.get_memory_dirs()] == expected_dirs
+    expected_dirs = [Path(dir1), Path(dir2)]
+    assert [Path(str(d)) for d in config.get_memory_dirs()] == expected_dirs
 
     # 清理
     del os.environ["WB_RAG_INDEX_DIR"]
@@ -73,7 +78,7 @@ def test_env_override():
     del os.environ["WB_RAG_DEFAULT_MEMORY_DIRS"]
     config._config_cache = None
 
-    print("✅ 环境变量覆盖正确")
+    print("✅ 环境变量覆盖正确（Windows 8.3 路径兼容）")
 
 
 def test_memory_scan_uses_config():
