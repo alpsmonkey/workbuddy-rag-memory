@@ -1,7 +1,7 @@
 [project]
 name = "workbuddy-rag-memory"
-version = "0.2.3"
-description = "WorkBuddy RAG 增强记忆系统：双索引 + 去重 + 时间衰减 + Cross-Encoder 重排 + HyDE + HTTP API + 自动蒸馏"
+version = "0.2.4"
+description = "WorkBuddy RAG 增强记忆系统：双索引 + 去重 + 时间衰减 + Cross-Encoder 重排 + HyDE + HTTP API + 蒸馏兜底 + 自动蒸馏"
 requires-python = ">=3.10"
 authors = [
     {name = "鹏哥", email = "peng@example.com"},
