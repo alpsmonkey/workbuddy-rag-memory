@@ -43,6 +43,7 @@ help:
 	@echo "  安装:"
 	@echo "    make install              安装核心依赖"
 	@echo "    make install-dev          安装含 dev/test 的依赖"
+	@echo "    make install-server       安装 fastapi + uvicorn"
 	@echo "    make download-models      下载 bge-m3 + bge-reranker 模型（一次性）"
 	@echo ""
 	@echo "  数据:"
@@ -59,6 +60,10 @@ help:
 	@echo "    make daemon-install       注册 watchdog 守护进程"
 	@echo "    make daemon               启动守护进程（前台）"
 	@echo ""
+	@echo "  HTTP 服务端（v0.2.3）:"
+	@echo "    make server               启动 FastAPI（localhost:8000）"
+	@echo "    make server-rerank        启动带 Reranker 的服务端"
+	@echo ""
 	@echo "  开发:"
 	@echo "    make test                 跑全部测试"
 	@echo "    make clean                清理临时索引"
@@ -72,8 +77,11 @@ install:
 
 install-dev:
 	$(PIP) install -r requirements.txt
-	$(PIP) install -e ".[test,watchdog]"
+	$(PIP) install -e ".[test,watchdog,server]"
 	@if [ "$(OS)" = "Windows_NT" ]; then $(PIP) install pywin32>=306; fi
+
+install-server:
+	$(PIP) install -e ".[server]"
 
 download-models:
 	@if [ ! -f "$$HOME/.cache/huggingface/models--BAAI--bge-m3" ]; then \
@@ -128,6 +136,12 @@ daemon-install:
 
 daemon-uninstall:
 	$(PYTHON) ~/.workbuddy/rag-daemon/uninstall.py
+
+server:
+	$(PYTHON) scripts/server.py --host 127.0.0.1 --port 8000
+
+server-rerank:
+	$(PYTHON) scripts/server.py --host 127.0.0.1 --port 8000 --rerank --hyde
 
 test:
 	$(PYTHON) -m pytest tests/ -v

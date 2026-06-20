@@ -139,6 +139,33 @@ results = mem.search("去重阈值", top_k=5, use_hyde=True)
 
 原理：用假设答案（"余弦相似度 0.92 触发合并..."）替代原 query 做向量检索，比短 query 更接近真实文档分布，召回提升 20-50%。
 
+### 7c. HTTP API 服务端（v0.2.3 新增）
+
+把 Memory 暴露成 HTTP REST API，让任何应用都能调用：
+
+```bash
+# 启动服务
+python scripts/server.py --host 0.0.0.0 --port 8000
+
+# 启用 Reranker + HyDE
+python scripts/server.py --rerank --hyde
+
+# 调用
+curl -X POST http://localhost:8000/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "SkillFather", "top_k": 3}'
+```
+
+端点：
+- `GET /health` 健康检查
+- `GET /stats` 索引统计
+- `POST /search` 单次检索
+- `POST /batch_search` 批量检索
+- `POST /add` 写入记忆
+
+Swagger UI 文档：http://localhost:8000/docs
+完整接口文档：[docs/API.md](docs/API.md)
+
 ### 8. WorkBuddy 启动钩子（阶段 2 新增）
 
 WorkBuddy 启动时（或新会话开始）自动扫一遍 `~/.workbuddy/memory/` + `./.workbuddy/memory/` 入库。
@@ -196,35 +223,51 @@ python -m scripts.eval --gold data/gold_set.jsonl
 ```
 workbuddy-rag-memory/
 ├── src/
-│   ├── embedder.py      # bge-m3 包装 + fallback（默认 HF 离线）
-│   ├── chunker.py       # 事实单元切分 + 元数据
+│   ├── embedder.py      # bge-m3 包装 + GPU 自动检测 + fallback
+│   ├── chunker.py       # 事实单元切分 + RAW_JSON 拆分
 │   ├── indexer.py       # 三索引联合存储
 │   ├── dedup.py         # 写入去重拦截器（带索引大小限制）
-│   ├── retriever.py     # 混合检索 + RRF + 时间衰减 + access_count
-│   ├── reranker.py      # BGE Reranker v2-m3 包装（Cross-Encoder）
-│   └── memory.py        # 统一入口（含 scan_workbuddy_memory）
+│   ├── retriever.py     # 混合检索 + RRF + 时间衰减 + HyDE 集成
+│   ├── reranker.py      # BGE Reranker v2-m3（智能 batch + LRU 缓存）
+│   ├── hyde.py          # HyDE Query 改写（v0.2.2）
+│   ├── memory.py        # 统一入口（含 scan_workbuddy_memory）
+│   └── config.py        # pyproject + WB_RAG_* 环境变量参数化（v0.2.1）
 ├── scripts/
 │   ├── ingest.py                   # 导入单文件
-│   ├── ingest_wb_memory.py         # 扫描 ~/.workbuddy/memory/ 入库（阶段 1.5 新增）
+│   ├── ingest_wb_memory.py         # 扫描 ~/.workbuddy/memory/ 入库
+│   ├── ingest_wb_memory_oneshot.py # 启动钩子用（静默模式）
 │   ├── query.py                    # 命令行查询
-│   ├── health.py                   # 健康度检查（阶段 1.5 新增）
-│   ├── distill.py                  # 自动蒸馏 + 清理低价值旧记忆（阶段 2 新增）
-│   ├── install_distill_cron.py     # 注册 distill 为定时任务（阶段 2 新增）
+│   ├── health.py                   # 健康度检查（--watch / --log-level）
+│   ├── distill.py                  # 自动蒸馏 + 清理低价值旧记忆
+│   ├── install_distill_cron.py     # 注册 distill 为定时任务
+│   ├── install_bootstrap.py        # Windows Run 键登录自动 ingest
+│   ├── server.py                   # FastAPI HTTP 服务端（v0.2.3）
 │   └── eval.py                     # 评估脚本
 ├── tests/
 │   ├── test_chunker.py            # chunker 单测
 │   ├── test_chunk_raw_json.py     # RAW_JSON 拆分单测
 │   ├── test_integration.py        # 端到端
 │   ├── test_decay_integration.py  # 时间衰减 + access_count 集成测试
-│   ├── test_reranker_e2e.py       # BGE Reranker 端到端（阶段 2 新增）
-│   └── test_bootstrap.py          # 启动钩子链路（阶段 2 新增）
+│   ├── test_reranker_e2e.py       # BGE Reranker 端到端
+│   ├── test_bootstrap.py          # 启动钩子链路
+│   ├── test_config.py             # 路径参数化
+│   ├── test_hyde.py               # HyDE Query 改写
+│   └── test_server.py             # FastAPI 端点测试
+├── docs/
+│   └── API.md                      # HTTP API 详细文档
 ├── data/
 │   ├── seed_memory.md   # 10 条种子记忆
 │   ├── gold_set.jsonl   # 评估集
 │   └── eval_report.md   # 评估报告（生成）
 ├── requirements.txt
 ├── pyproject.toml
-└── .env.example
+├── Dockerfile
+├── docker-compose.yml
+├── Makefile                # Linux/Mac 入口
+├── make.py                 # Windows Python 替代
+├── INSTALL.md              # 5 分钟小白指南
+├── LICENSE                 # MIT
+└── README.md
 ```
 
 ## 关键设计

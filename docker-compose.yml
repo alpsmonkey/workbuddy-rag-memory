@@ -6,6 +6,8 @@ services:
     image: workbuddy-rag-memory:latest
     container_name: workbuddy-rag
     restart: unless-stopped
+    ports:
+      - "8000:8000"   # HTTP API
     volumes:
       # 持久化索引（用户级记忆 + RAG 索引）
       - ~/.workbuddy:/root/.workbuddy
@@ -16,7 +18,7 @@ services:
       - HF_HUB_OFFLINE=1
       - TRANSFORMERS_OFFLINE=1
       - WB_RAG_INDEX_DIR=/root/.workbuddy/rag-index
-    # 默认命令在 Dockerfile 已设 CMD=health，这里覆盖为常驻 daemon
-    # command: python ~/.workbuddy/rag-daemon/daemon.py --watch /root/.workbuddy/memory
+    # 默认命令：HTTP 服务端（FastAPI）
+    command: ["python", "scripts/server.py", "--host", "0.0.0.0", "--port", "8000"]
     stdin_open: true
     tty: true

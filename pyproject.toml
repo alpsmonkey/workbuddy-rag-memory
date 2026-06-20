@@ -1,7 +1,7 @@
 [project]
 name = "workbuddy-rag-memory"
-version = "0.2.2"
-description = "WorkBuddy RAG 增强记忆系统：双索引 + 去重 + 时间衰减 + Cross-Encoder 重排 + HyDE + 自动蒸馏"
+version = "0.2.3"
+description = "WorkBuddy RAG 增强记忆系统：双索引 + 去重 + 时间衰减 + Cross-Encoder 重排 + HyDE + HTTP API + 自动蒸馏"
 requires-python = ">=3.10"
 authors = [
     {name = "鹏哥", email = "peng@example.com"},
@@ -30,14 +30,18 @@ dependencies = [
 
 [project.optional-dependencies]
 onnx = ["onnxruntime>=1.17.0"]
-test = ["pytest>=8.0.0", "pytest-cov>=4.1.0"]
+test = ["pytest>=8.0.0", "pytest-cov>=4.1.0", "httpx>=0.27.0"]
 watchdog = ["watchdog>=4.0.0"]
+server = ["fastapi>=0.110.0", "uvicorn>=0.27.0"]
 win32 = ["pywin32>=306; sys_platform=='win32'"]
 all = [
     "onnxruntime>=1.17.0",
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
     "watchdog>=4.0.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+    "httpx>=0.27.0",
 ]
 
 [project.urls]
