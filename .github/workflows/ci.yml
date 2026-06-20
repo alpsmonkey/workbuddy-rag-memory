@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e ".[test]"
+
+      - name: Verify module imports
+        run: |
+          python -c "from src.config import get_index_dir, get_memory_dirs; print(get_index_dir())"
+          python -c "from src.memory import Memory; print('Memory OK')"
+          python -c "from src.embedder import Embedder; print('Embedder OK')"
+          python -c "from src.reranker import Reranker; print('Reranker OK')"
+
+      - name: Run unit tests (no bge-m3, no API calls)
+        run: |
+          python -m pytest tests/test_config.py tests/test_chunker.py tests/test_chunk_raw_json.py -v
+
+      - name: Note on full e2e
+        if: success()
+        run: |
+          echo "✅ Unit tests passed on ${{ matrix.os }} / Python ${{ matrix.python-version }}"
+          echo ""
+          echo "Full e2e tests (bge-m3 + bge-reranker + LanceDB) require ~6GB models"
+          echo "Run locally with: pytest tests/ -v (after 'python download_bge_m3.py')"
