@@ -11,6 +11,18 @@
 - 实际查询 = min(search_k, count, MAX_SEARCH_K)
 - MAX_SEARCH_K 默认 200，防大索引 O(n) 退化
 - 大索引（> 1000）时降低 search_k 避免冗余
+
+source 层级边界（2026-06-20 强化 — 防 D 方案 / rag_search 撞车）：
+- 记忆按信息密度分两级：
+    SUMMARY 级：user-memory        (MEMORY.md 长期事实，骨架级，D 方案预注入用)
+    FULL    级：workspace-log / conversation / unknown (血肉级，rag_search 按需深挖用)
+- 合并时层级守门（防止细节丢失或反向退化）：
+    新 full     + 旧 summary → MERGE  (允许升级：骨架被血肉补全)
+    新 summary  + 旧 full    → SKIP   (防退化：保留已有细节，不让骨架反向覆盖血肉)
+    同层级                 → 按 confidence 比较（原逻辑）
+- 效果：
+    MEMORY.md 的精简条目不会被工作日志/对话的展开版本无脑覆盖（升级安全）
+    工作日志/对话的精细版本也不会被 MEMORY.md 的简短更新覆盖（反向安全）
 """
 from __future__ import annotations
 import logging
@@ -56,6 +68,22 @@ LARGE_INDEX_THRESHOLD = get_large_index_threshold_compat()
 
 # skip 区间下限（低于此相似度直接 insert）
 DEFAULT_SKIP_LOW = get_dedup_skip_low()
+
+
+# source 层级映射（2026-06-20 强化）
+# 依据 chunker.py:117-128 detect_source() 的返回标签
+# 'user-memory' (MEMORY.md) 是骨架级；其他都是血肉级
+SOURCE_LEVELS: Dict[str, str] = {
+    "user-memory":   "summary",   # 骨架级（D 方案预注入用）
+    "workspace-log": "full",      # 血肉级（rag_search 按需深挖）
+    "conversation":  "full",      # 血肉级
+    "unknown":       "full",      # 未知默认按 full 对待（保守策略：宁保细节）
+}
+
+
+def _level_of(source: str) -> str:
+    """查 source 的层级（summary / full），未知默认 full（保细节）"""
+    return SOURCE_LEVELS.get(source or "unknown", "full")
 
 
 @dataclass
@@ -104,9 +132,13 @@ class Dedup:
         检查 chunk 是否重复
 
         规则：
-        - 相似度 >= threshold: 决策 merge（高置信度覆盖低置信度）
-        - 相似度 0.85~0.92: 决策 skip（语义相似但内容不同，宁可错杀）
-        - 相似度 < 0.85: 决策 insert
+        - 相似度 >= threshold:
+            * summary-over-full → SKIP（防退化，2026-06-20 新增）
+            * 同层级 / full-over-summary → 按 confidence 比较：
+                - 新 conf >= 旧 conf → MERGE
+                - 否则 → SKIP
+        - 相似度 0.85~0.92: SKIP（语义相似但内容不同，宁可错杀）
+        - 相似度 < 0.85: INSERT
 
         注意：hash 兜底模式下无语义信息，跳过去重直接 insert
         """
@@ -135,6 +167,13 @@ class Dedup:
         best_id = best.get("id", "")
         best_vec = best.get("vector", [])
         best_conf = float(best.get("confidence", 0.5))
+        best_source = best.get("source", "unknown")
+
+        # 新 chunk 的元数据
+        new_source = chunk.meta.get("source", "unknown")
+        new_conf = float(chunk.meta.get("confidence", 0.5))
+        new_level = _level_of(new_source)
+        best_level = _level_of(best_source)
 
         sim = self._cosine(emb, np.array(best_vec, dtype=np.float32))
 
@@ -142,20 +181,33 @@ class Dedup:
         size_tag = f"[{count} chunks, k={k}{',large-mode' if count > LARGE_INDEX_THRESHOLD else ''}]"
 
         if sim >= self.threshold:
-            # 高相似：合并
-            if chunk.meta.get("confidence", 0.5) >= best_conf:
+            # === 层级守门（2026-06-20 新增）===
+            # 防 summary 覆盖 full → 保留细节（不让 MEMORY.md 的精简条目覆盖工作日志）
+            if new_level == "summary" and best_level == "full":
+                return DedupResult(
+                    Decision.SKIP,
+                    existing_id=best_id,
+                    similarity=sim,
+                    reason=(
+                        f"summary-over-full blocked: "
+                        f"new({new_source}) vs existing({best_source}) {size_tag}"
+                    ),
+                )
+            # 同层级 / full-over-summary（升级）→ 按 confidence 比较
+            if new_conf >= best_conf:
+                level_tag = "" if new_level == best_level else f", upgrade {best_level}->{new_level}"
                 return DedupResult(
                     Decision.MERGE,
                     existing_id=best_id,
                     similarity=sim,
-                    reason=f"sim={sim:.3f} >= {self.threshold}, new conf higher {size_tag}"
+                    reason=f"sim={sim:.3f} >= {self.threshold}, new conf higher{level_tag} {size_tag}",
                 )
             else:
                 return DedupResult(
                     Decision.SKIP,
                     existing_id=best_id,
                     similarity=sim,
-                    reason=f"sim={sim:.3f} >= {self.threshold}, existing conf higher {size_tag}"
+                    reason=f"sim={sim:.3f} >= {self.threshold}, existing conf higher {size_tag}",
                 )
 
         if sim >= 0.85:
@@ -164,14 +216,14 @@ class Dedup:
                 Decision.SKIP,
                 existing_id=best_id,
                 similarity=sim,
-                reason=f"sim={sim:.3f} in [0.85, {self.threshold}), semantically similar {size_tag}"
+                reason=f"sim={sim:.3f} in [0.85, {self.threshold}), semantically similar {size_tag}",
             )
 
         return DedupResult(
             Decision.INSERT,
             existing_id=best_id,
             similarity=sim,
-            reason=f"sim={sim:.3f} < 0.85, new fact {size_tag}"
+            reason=f"sim={sim:.3f} < 0.85, new fact {size_tag}",
         )
 
     def write(self, chunk: Chunk) -> DedupResult:
