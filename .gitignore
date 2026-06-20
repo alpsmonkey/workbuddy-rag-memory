@@ -1,0 +1,37 @@
+# 临时目录 / 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# 索引和测试数据
+.index/
+.index-test/
+*.bak-*/
+
+# 环境
+.env
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Python 打包
+*.egg-info/
+build/
+dist/
+*.whl
+
+# 日志（不上传）
+*.log
+.cache/
+
+# 临时下载
+downloads/

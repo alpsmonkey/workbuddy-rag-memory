@@ -1,0 +1,23 @@
+# Core RAG
+lancedb>=0.10.0
+sentence-transformers>=3.0.0
+huggingface_hub>=0.20.0
+numpy>=1.26.0
+pydantic>=2.5.0
+python-dotenv>=1.0.0
+
+# Optional: ONNX 加速（embedding 用）
+onnxruntime>=1.17.0
+
+# Eval & test
+pytest>=8.0.0
+pytest-cov>=4.1.0
+
+# Optional: GPU 加速（如有 CUDA 可装；CPU 环境可注释）
+# torch>=2.1.0
+
+# Optional: Windows 启动钩子注册表读写
+# pywin32>=306 ; sys_platform == "win32"
+
+# Optional: watchdog 守护进程（实时监听 .md 变更）
+# watchdog>=4.0.0

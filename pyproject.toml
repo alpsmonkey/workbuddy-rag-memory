@@ -1,0 +1,106 @@
+[project]
+name = "workbuddy-rag-memory"
+version = "0.2.0"
+description = "WorkBuddy RAG 增强记忆系统：双索引 + 去重 + 时间衰减 + Cross-Encoder 重排 + 自动蒸馏"
+requires-python = ">=3.10"
+authors = [
+    {name = "鹏哥", email = "peng@example.com"},
+]
+keywords = ["rag", "memory", "embedding", "workbuddy", "bge-m3", "reranker"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "lancedb>=0.10.0",
+    "sentence-transformers>=3.0.0",
+    "huggingface_hub>=0.20.0",
+    "numpy>=1.26.0",
+    "pydantic>=2.5.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+onnx = ["onnxruntime>=1.17.0"]
+test = ["pytest>=8.0.0", "pytest-cov>=4.1.0"]
+watchdog = ["watchdog>=4.0.0"]
+win32 = ["pywin32>=306; sys_platform=='win32'"]
+all = [
+    "onnxruntime>=1.17.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "watchdog>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/workbuddy-rag-memory"
+Documentation = "https://github.com/your-org/workbuddy-rag-memory/blob/main/INSTALL.md"
+Repository = "https://github.com/your-org/workbuddy-rag-memory.git"
+Issues = "https://github.com/your-org/workbuddy-rag-memory/issues"
+
+# ============================================================================
+# WorkBuddy RAG 配置（路径参数化关键）
+# ============================================================================
+[tool.workbuddy-rag]
+# 共享索引目录（默认 ~/.workbuddy/rag-index/）
+index_dir = "~/.workbuddy/rag-index"
+
+# 默认扫描的真实记忆源（用户级 + 项目级）
+default_memory_dirs = [
+    "~/.workbuddy/memory",         # 用户级（跨项目）
+    "./.workbuddy/memory",         # 项目级（单项目）
+]
+
+# 默认扫描的 glob 模式
+default_memory_patterns = [
+    "*_memory.md",                         # session id 命名
+    "MEMORY.md",                            # 长文记忆
+    "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*.md",  # YYYY-MM-DD 工作日志
+]
+
+# 默认忽略的文件名
+default_ignore_patterns = [
+    "*.bak", "*.tmp.*", "*~", "*.swp", ".DS_Store",
+    "README.md", "CHANGELOG.md", "SKILL.md", "INSTALL.md",
+    "TROUBLESHOOTING.md", "LICENSE.md", "CONTRIBUTING.md",
+]
+
+# bge-m3 embedding（1024 维，中英双语）
+embedding_model = "BAAI/bge-m3"
+embedding_dim = 1024
+
+# BGE Reranker（可选，二阶段精排）
+reranker_model = "BAAI/bge-reranker-v2-m3"
+
+# RRF 融合参数（k=30 区分度更明显）
+rrf_k = 30
+
+# Dedup 阈值（>=0.92 merge / 0.85-0.92 skip / <0.85 insert）
+dedup_threshold = 0.92
+dedup_skip_low = 0.85
+max_search_k = 200
+large_index_threshold = 1000
+
+# 时间衰减参数
+tau_days = 90.0
+
+# 自动蒸馏 cron 时间
+distill_cron_time = "03:00"
+
+# ============================================================================
+# pytest 配置
+# ============================================================================
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

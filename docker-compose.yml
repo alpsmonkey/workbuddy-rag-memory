@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  workbuddy-rag:
+    build: .
+    image: workbuddy-rag-memory:latest
+    container_name: workbuddy-rag
+    restart: unless-stopped
+    volumes:
+      # 持久化索引（用户级记忆 + RAG 索引）
+      - ~/.workbuddy:/root/.workbuddy
+      # HF 模型缓存（可选；已构建镜像里有了）
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - PYTHONIOENCODING=utf-8
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - WB_RAG_INDEX_DIR=/root/.workbuddy/rag-index
+    # 默认命令在 Dockerfile 已设 CMD=health，这里覆盖为常驻 daemon
+    # command: python ~/.workbuddy/rag-daemon/daemon.py --watch /root/.workbuddy/memory
+    stdin_open: true
+    tty: true

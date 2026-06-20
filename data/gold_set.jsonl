@@ -1,0 +1,51 @@
+{"query": "鹏哥用什么 Python 版本", "relevant_ids": ["chunk_1781871181_76939"]}
+{"query": "鹏哥有哪些工作偏好", "relevant_ids": ["chunk_1781871181_76939", "chunk_1781871300_74794"]}
+{"query": "记忆架构有几层", "relevant_ids": ["chunk_1781871181_23962"]}
+{"query": "WorkBuddy 记忆系统有什么问题", "relevant_ids": ["chunk_1781871181_29472"]}
+{"query": "SkillFather 是用什么语言开发的", "relevant_ids": ["chunk_1781871181_66028"]}
+{"query": "SkillFather 评分有哪几个维度", "relevant_ids": ["chunk_1781871181_43682"]}
+{"query": "embedding 用什么模型", "relevant_ids": ["chunk_1781871181_11272"]}
+{"query": "embedding 维度是多少", "relevant_ids": ["chunk_1781871181_11272"]}
+{"query": "向量库选型", "relevant_ids": ["chunk_1781871181_11272"]}
+{"query": "关键词检索用什么", "relevant_ids": ["chunk_1781871181_11272"]}
+{"query": "去重阈值是多少", "relevant_ids": ["chunk_1781871181_00035"]}
+{"query": "0.92 是干嘛的", "relevant_ids": ["chunk_1781871181_00035"]}
+{"query": "时间衰减公式", "relevant_ids": ["chunk_1781871181_84535"]}
+{"query": "RAG 项目分几个阶段", "relevant_ids": ["chunk_1781871181_12428"]}
+{"query": "RAG 项目路径在哪", "relevant_ids": ["chunk_1781871301_72813"]}
+{"query": "技术栈是什么", "relevant_ids": ["chunk_1781871301_72813"]}
+{"query": "阶段 1 评估基线多少", "relevant_ids": ["chunk_1781871301_26837"]}
+{"query": "阶段 2 任务有哪些", "relevant_ids": ["chunk_1781871301_68301"]}
+{"query": "chunk 最小长度", "relevant_ids": ["chunk_1781871301_52041"]}
+{"query": "三档去重阈值", "relevant_ids": ["chunk_1781871301_52041"]}
+{"query": "Windows 编码坑", "relevant_ids": ["chunk_1781871301_47175"]}
+{"query": "bge-m3 模型多大", "relevant_ids": ["chunk_1781871301_47175"]}
+{"query": "默认工作空间路径", "relevant_ids": ["chunk_1781871300_23604"]}
+{"query": "鹏哥是谁", "relevant_ids": ["chunk_1781871300_79088"]}
+{"query": "用户用什么系统", "relevant_ids": ["chunk_1781871300_79088"]}
+{"query": "提问用什么节奏", "relevant_ids": ["chunk_1781871300_74794"]}
+{"query": "RAG 阶段 1 交付了什么", "relevant_ids": ["chunk_1781871301_63617", "chunk_1781871301_53872"]}
+{"query": "交付清单有哪些文件", "relevant_ids": ["chunk_1781871301_53872"]}
+{"query": "SkillFather 项目背景", "relevant_ids": ["chunk_1781871181_15668"]}
+{"query": "WorkBuddy 三层记忆", "relevant_ids": ["chunk_1781871181_23962"]}
+{"query": "5 个评分维度分别是什么", "relevant_ids": ["chunk_1781871181_43682"]}
+{"query": "RRF 是什么", "relevant_ids": ["chunk_1781871181_11272"]}
+{"query": "为什么弃用 GraphQL", "relevant_ids": ["chunk_1781871181_66028"]}
+{"query": "watchdog 怎么测试", "relevant_ids": ["chunk_1781871595_22479"]}
+{"query": "E2E 唯一标记词是什么", "relevant_ids": ["chunk_1781871595_22479"]}
+{"query": "SkillFather 项目作者是谁", "relevant_ids": []}
+{"query": "cheat-on-content 是什么", "relevant_ids": []}
+{"query": "kazix-writer 怎么用", "relevant_ids": []}
+{"query": "Word count 函数在哪", "relevant_ids": []}
+{"query": "Azure OpenAI 价格", "relevant_ids": []}
+{"query": "如何配置 GPU 推理", "relevant_ids": []}
+{"query": "LanceDB 表删除", "relevant_ids": []}
+{"query": "embedding 缓存策略", "relevant_ids": []}
+{"query": "BGE reranker 怎么接", "relevant_ids": ["chunk_1781871301_68301"]}
+{"query": "WorkBuddy 记忆如何查询", "relevant_ids": ["chunk_1781871181_29472", "chunk_1781871181_23962"]}
+{"query": "chunk 切分长度", "relevant_ids": ["chunk_1781871301_52041"]}
+{"query": "RAG 优化目标分阶段", "relevant_ids": ["chunk_1781871181_12428"]}
+{"query": "路径约定是什么", "relevant_ids": ["chunk_1781871300_23604"]}
+{"query": "chunk 长度阈值", "relevant_ids": ["chunk_1781871301_52041"]}
+{"query": "Python 3.13 还是 3.14", "relevant_ids": ["chunk_1781871181_76939"]}
+{"query": "记忆架构缺点", "relevant_ids": ["chunk_1781871181_29472"]}
