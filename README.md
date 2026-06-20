@@ -1,4 +1,4 @@
-# WorkBuddy RAG 增强记忆系统 - 阶段 2
+# WorkBuddy RAG 增强记忆系统
 
 > 三索引（向量 + BM25 + 元数据）+ 写入去重 + 时间衰减 + Cross-Encoder 重排 + 蒸馏闭环
 > 目标：Recall@10 ≥ 60%，Top-3 精度 ≥ 80%，索引只减不增
