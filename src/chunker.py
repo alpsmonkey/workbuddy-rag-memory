@@ -256,6 +256,26 @@ def chunk_text(
     remaining = text
     raw_json_blocks = list(RAW_JSON_PATTERN.finditer(text))
     if raw_json_blocks:
+        # Guard: 整段只有 RAW_JSON 包裹（无 surrounding text）且 RAW_JSON 是合法 JSON
+        #       且含 cloud profile 特征（uid/memoryBlock/memory_type）→ 整段 skip
+        # 原因：cloud <memory> block 已通过 L1 自动注入 prompt，写进 RAG 是重复且噪声
+        non_raw_text = RAW_JSON_PATTERN.sub("", text).strip()
+        if len(non_raw_text) < 20 and raw_json_blocks:
+            # 进一步判定：RAW_JSON 内容是合法 JSON 且像 cloud profile
+            first_block = raw_json_blocks[0].group(1)
+            try:
+                import json as _json
+                data = _json.loads(first_block.strip())
+                if isinstance(data, dict) and any(
+                    k in data for k in ("uid", "memoryBlock", "memory_type")
+                ):
+                    import logging
+                    logging.getLogger(__name__).info(
+                        "chunk_text: skip cloud profile (uid/memoryBlock/memory_type present)"
+                    )
+                    return []  # cloud profile 整体不入 RAG
+            except (ValueError, _json.JSONDecodeError):
+                pass  # 不是合法 JSON → 按 fallback 处理（旧行为）
         for m in raw_json_blocks:
             json_block = m.group(1)
             json_chunks = _split_raw_json_block(json_block, source, min_length)
