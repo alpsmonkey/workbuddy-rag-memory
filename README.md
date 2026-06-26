@@ -3,6 +3,27 @@
 > 三索引（向量 + BM25 + 元数据）+ 写入去重 + 时间衰减 + Cross-Encoder 重排 + 蒸馏闭环
 > 目标：Recall@10 ≥ 60%，Top-3 精度 ≥ 80%，索引只减不增
 
+<p align="left">
+  <a href="https://github.com/alpsmonkey/workbuddy-rag-memory/stargazers">
+    <img src="https://img.shields.io/github/stars/alpsmonkey/workbuddy-rag-memory?style=flat-square" alt="GitHub stars"/>
+  </a>
+  <a href="https://github.com/alpsmonkey/workbuddy-rag-memory/network/members">
+    <img src="https://img.shields.io/github/forks/alpsmonkey/workbuddy-rag-memory?style=flat-square" alt="GitHub forks"/>
+  </a>
+  <a href="https://github.com/alpsmonkey/workbuddy-rag-memory/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/alpsmonkey/workbuddy-rag-memory?style=flat-square" alt="License"/>
+  </a>
+  <a href="https://star-history.com/#alpsmonkey/workbuddy-rag-memory&Date">
+    <img src="https://img.shields.io/badge/Star-History-ffb400?style=flat-square&logo=star" alt="Star History"/>
+  </a>
+</p>
+
+<a href="https://star-history.com/#alpsmonkey/workbuddy-rag-memory&Date">
+  <picture>
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=alpsmonkey/workbuddy-rag-memory&type=Date&theme=dark" width="640"/>
+  </picture>
+</a>
+
 ## 架构
 
 ```
@@ -509,6 +530,18 @@ results_rerank = reranker.rerank(query, results_rrf)    # 交叉编码器重排
 - [x] 阶段 2：时间衰减重排
 - [ ] 阶段 3：自动蒸馏 + 健康度仪表盘
 - [ ] 标注完整 gold set（至少 100 条）
+
+## ⭐ Star History
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=alpsmonkey/workbuddy-rag-memory&type=Date&theme=dark" />
+  <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=alpsmonkey/workbuddy-rag-memory&type=Date" />
+  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=alpsmonkey/workbuddy-rag-memory&type=Date" width="720"/>
+</picture>
+
+> 👉 [在 Star History 查看完整曲线](https://star-history.com/#alpsmonkey/workbuddy-rag-memory&Date)
+
+如果你觉得这个项目有用，欢迎点 ⭐ 支持一下——每一个 star 都是我继续迭代 v0.3 阶段（自动蒸馏 + 健康度仪表盘）的动力。
 
 ## 守护进程（watchdog 自动入库）
 

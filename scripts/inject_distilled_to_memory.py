@@ -205,13 +205,22 @@ def _read_memory_split(memory_path: Path) -> tuple[str, str]:
     return before, after
 
 
-def _assemble_final(manual_before: str, manual_after: str, new_auto_body: str) -> str:
+def _assemble_final(
+    manual_before: str,
+    manual_after: str,
+    new_auto_body: str,
+    memory_path: Path = DEFAULT_MEMORY_PATH,
+) -> str:
     """拼装最终 MEMORY.md 内容
 
     Args:
         manual_before: START 标记之前的部分（手写 + 标记本身）
         manual_after: END 标记之后的部分
         new_auto_body: 新的自动注入内容（不含标记）
+        memory_path: MEMORY.md 路径（默认 L2 user-level 路径）。
+            只在"无标记 → 追加到文件末尾"分支用到——必须传入以遵守
+            --memory-path 覆盖（之前误读 DEFAULT_MEMORY_PATH 全局常量
+            会让 --memory-path /tmp/x.md 在无标记场景下污染 ~/.workbuddy/MEMORY.md）。
 
     Returns:
         完整文件内容
@@ -225,10 +234,10 @@ def _assemble_final(manual_before: str, manual_after: str, new_auto_body: str) -
             f"{AUTO_INJECT_END}\n"
         )
         # 如果文件不存在，加个最小头部
-        if not DEFAULT_MEMORY_PATH.exists():
+        if not memory_path.exists():
             return f"# WorkBuddy 长期记忆\n{body}"
         # 文件存在但没标记 → 追加到末尾
-        existing = DEFAULT_MEMORY_PATH.read_text(encoding="utf-8")
+        existing = memory_path.read_text(encoding="utf-8")
         return existing.rstrip() + "\n" + body
 
     # 有标记区间 → 替换两个标记之间
@@ -277,7 +286,7 @@ def run_inject(
     manual_before, manual_after = _read_memory_split(memory_path)
 
     # 4. 拼装
-    final_text = _assemble_final(manual_before, manual_after, new_auto_body)
+    final_text = _assemble_final(manual_before, manual_after, new_auto_body, memory_path)
     after_chars = len(final_text)
 
     # 5. 统计实际注入的项目和 chunks

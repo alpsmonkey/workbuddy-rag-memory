@@ -75,7 +75,8 @@ def _check_index(mem: Memory) -> dict:
         notes.append("索引为空")
     if total > LARGE_INDEX_THRESHOLD:
         notes.append(f"大索引（>{LARGE_INDEX_THRESHOLD}），dedup 自动降速")
-    if no_access / total > 0.9 and total > 10:
+    # 顺序很重要：total > 10 必须在前，否则 total == 0 时左侧 no_access/total 抛 ZeroDivisionError
+    if total > 10 and no_access / total > 0.9:
         notes.append(f"90%+ 记忆从未被访问，可能存在死数据")
 
     return {

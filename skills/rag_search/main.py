@@ -28,22 +28,52 @@ from pathlib import Path
 
 
 # ============================================================
-# 路径自动发现（避免硬编码个人绝对路径，便于开源分发）
+# 路径自动发现（多策略：避免硬编码个人绝对路径，便于开源分发）
+# ============================================================
+# 优先级（从高到低）：
+#   1. config.json（与 main.py 同目录，由 install_skills.py 自动生成）
+#   2. 自动发现：PROJECT_ROOT/.venv 存在 → 当作项目根
+#   3. 回退：env var（WB_RAG_VENV_PYTHON / WB_RAG_INDEX_DIR / WB_RAG_SRC）
+# 用途：skill 安装到 ~/.workbuddy/skills/ 后，自动发现会错；
+#       config.json 含项目根绝对路径，规避 SKILL_DIR.parent.parent 推导错误。
 # ============================================================
 _THIS_FILE = Path(__file__).resolve()
 SKILL_DIR = _THIS_FILE.parent                  # skills/rag_search/
 SKILLS_ROOT = SKILL_DIR.parent                 # skills/
-PROJECT_ROOT = SKILLS_ROOT.parent              # 项目根（含 src/ 和 .venv/）
+PROJECT_ROOT = SKILLS_ROOT.parent              # 项目根（含 src/ 和 .venv/），仅在源位置时正确
 
 # 默认 venv python（项目根/.venv/Scripts/python.exe）
 _DEFAULT_VENV = PROJECT_ROOT / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
-VENV_PYTHON = Path(os.environ.get("WB_RAG_VENV_PYTHON", str(_DEFAULT_VENV)))
 
 # worker.py 跟 main.py 同目录
 WORKER_PATH = SKILL_DIR / "worker.py"
 
-# 超时（秒）
-TIMEOUT_SEC = 60
+# 超时（秒）— 首次冷启动要加载 bge-m3 到内存，60-70s 实测不够，给 180s
+TIMEOUT_SEC = 180
+
+
+def _discover_paths():
+    """多策略路径发现。Returns: (project_root: Path|None, index_dir: Path)
+
+    - 找到 config.json：用其声明的绝对路径（无 tilde 隐患）
+    - 自动发现成立（PROJECT_ROOT/.venv 存在）：用推导路径
+    - 都没：project_root=None，让 run_search 走 env var 回退
+    """
+    # 1. config.json（最高优先级，含绝对路径）
+    config_path = SKILL_DIR / "config.json"
+    if config_path.exists():
+        try:
+            cfg = json.loads(config_path.read_text(encoding="utf-8"))
+            return Path(cfg["project_root"]), Path(cfg["index_dir"])
+        except Exception as e:
+            print(f"[main] config.json 解析失败，回退: {e}", file=sys.stderr)
+
+    # 2. 自动发现：项目根必须有 .venv 子目录（作为锚点）
+    if (PROJECT_ROOT / ".venv").exists():
+        return PROJECT_ROOT, Path.home() / ".workbuddy" / "rag-index"
+
+    # 3. 回退：依赖 env var
+    return None, Path(os.environ.get("WB_RAG_INDEX_DIR", str(Path.home() / ".workbuddy" / "rag-index")))
 
 
 def run_search(query: str, top_k: int = 5, use_hyde: bool = True) -> dict:
@@ -57,15 +87,33 @@ def run_search(query: str, top_k: int = 5, use_hyde: bool = True) -> dict:
     if not query:
         return {"query": "", "count": 0, "results": [], "note": "empty query"}
 
-    if not VENV_PYTHON.exists():
-        return {"query": query, "count": 0, "results": [], "note": f"venv missing: {VENV_PYTHON}"}
+    # 多策略路径发现
+    project_root, index_dir = _discover_paths()
+
+    # venv python 决策
+    if project_root is not None:
+        venv = project_root / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    else:
+        venv = Path(os.environ.get("WB_RAG_VENV_PYTHON", str(_DEFAULT_VENV)))
+
+    if not venv.exists():
+        return {"query": query, "count": 0, "results": [], "note": f"venv missing: {venv}"}
     if not WORKER_PATH.exists():
         return {"query": query, "count": 0, "results": [], "note": f"worker missing: {WORKER_PATH}"}
 
-    cmd = [str(VENV_PYTHON), str(WORKER_PATH), query, str(top_k)]
+    cmd = [str(venv), str(WORKER_PATH), query, str(top_k)]
     if not use_hyde:
         cmd.append("--no-hyde")
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "HF_HUB_OFFLINE": "1"}
+
+    # 关键：把项目根 src 和 index_dir 通过 env 传给 worker（worker 也读这俩 env var）
+    env = {
+        **os.environ,
+        "PYTHONIOENCODING": "utf-8",
+        "HF_HUB_OFFLINE": "1",
+    }
+    if project_root is not None:
+        env["WB_RAG_SRC"] = str(project_root / "src")
+    env["WB_RAG_INDEX_DIR"] = str(index_dir)
 
     try:
         r = subprocess.run(
